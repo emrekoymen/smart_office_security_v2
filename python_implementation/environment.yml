@@ -1,0 +1,11 @@
+name: smart_office_security_v2
+dependencies:
+  - python=3.9
+  - pip
+  - opencv
+  - "numpy<2.0"
+  - pip:
+      - pycoral
+      - pyserial
+      - imutils
+      - tflite-runtime
