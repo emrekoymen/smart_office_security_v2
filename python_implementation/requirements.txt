@@ -1,0 +1,9 @@
+paho-mqtt
+numpy
+opencv-python
+
+# Note: tflite_runtime (or tensorflow-lite) is also required.
+# Install it separately based on your system (especially for Raspberry Pi / Coral):
+# https://www.tensorflow.org/lite/guide/python
+# For Coral Devices:
+# https://coral.ai/docs/accelerator/get-started/#installation 

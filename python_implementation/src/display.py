@@ -4,18 +4,26 @@ import time
 class DisplayWindow:
     def __init__(self, window_name):
         self.window_name = window_name
-        cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
+        # cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL) # Moved to main.py
 
-    def show(self, frame, bbox=None, score=None, fps=None):
+    def draw_overlays(self, frame, bbox=None, score=None, fps=None):
+        """Draws bounding boxes, scores, and FPS on the frame."""
         disp_frame = frame.copy()
         if bbox is not None and score is not None:
-            x, y, w, h = bbox
+            # Ensure bbox coordinates are integers
+            x, y, w, h = map(int, bbox)
             cv2.rectangle(disp_frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
             label = f"Person: {score:.2f}"
             cv2.putText(disp_frame, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
         if fps is not None:
             cv2.putText(disp_frame, f"FPS: {fps:.1f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
-        cv2.imshow(self.window_name, disp_frame)
+        # cv2.imshow(self.window_name, disp_frame) # Removed - display handled externally
+        return disp_frame # Return the annotated frame
+
+    def create_window(self):
+        """Creates the display window."""
+        cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
 
     def close(self):
+        """Closes the specific display window."""
         cv2.destroyWindow(self.window_name)
