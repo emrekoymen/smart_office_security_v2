@@ -1,0 +1,4 @@
+paho-mqtt
+numpy
+opencv-python
+# plyer # Optional: for desktop notifications in alert_listener.py 

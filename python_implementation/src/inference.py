@@ -77,11 +77,33 @@ class PersonDetector:
 
     def detect(self, frame):
         # Debug interpreter status
-        print(f"[DEBUG][Inference] TPU_AVAILABLE={TPU_AVAILABLE}, tpu_failed={self.tpu_failed}, tpu_interp_loaded={self.interpreter_tpu is not None}, cpu_interp_loaded={self.interpreter_cpu is not None}")
-        # Resize to model input
-        input_frame = cv2.resize(frame, (300, 300))
-        input_data = np.expand_dims(input_frame, axis=0)
+        # print(f"[DEBUG][Inference] TPU_AVAILABLE={TPU_AVAILABLE}, tpu_failed={self.tpu_failed}, tpu_interp_loaded={self.interpreter_tpu is not None}, cpu_interp_loaded={self.interpreter_cpu is not None}")
+        
+        # Input frame is already grayscale from CameraStream
+        # Resize to model input size (e.g., 300x300)
+        input_frame_resized = cv2.resize(frame, (300, 300))
+
+        # Ensure input_frame is (H, W, C) - for grayscale, C=1
+        if input_frame_resized.ndim == 2:  # Grayscale image (H, W)
+            input_frame_reshaped = np.expand_dims(input_frame_resized, axis=-1)  # (H, W, 1)
+        elif input_frame_resized.ndim == 3 and input_frame_resized.shape[2] == 1: # Already (H,W,1)
+            input_frame_reshaped = input_frame_resized
+        else:
+            # This case should ideally not be reached if camera provides correct grayscale
+            # If it were BGR, we would convert: cv2.cvtColor(input_frame_resized, cv2.COLOR_BGR2GRAY)
+            # and then expand_dims. But since we expect grayscale, this is an error/unexpected state.
+            print(f"[ERROR][Inference] Unexpected frame dimensions: {input_frame_resized.shape}. Expected grayscale.")
+            # Fallback: try to take the first channel if it's 3-channel, or error out
+            if input_frame_resized.ndim == 3 and input_frame_resized.shape[2] == 3:
+                 print("[WARN][Inference] Taking first channel of 3-channel image as grayscale.")
+                 input_frame_reshaped = np.expand_dims(input_frame_resized[:,:,0], axis=-1)
+            else:
+                return [], 'NONE' # Cannot process
+
+        # Add batch dimension: (1, H, W, 1)
+        input_data = np.expand_dims(input_frame_reshaped, axis=0)
         input_data = input_data.astype(np.uint8)
+
         # Try TPU first
         if TPU_AVAILABLE and not self.tpu_failed and self.interpreter_tpu:
             try:
@@ -102,11 +124,21 @@ class PersonDetector:
             classes = self.interpreter_cpu.get_tensor(output_details[1]['index'])[0]  # Class index
             scores = self.interpreter_cpu.get_tensor(output_details[2]['index'])[0]  # Confidence
             detections = []
+            # Original frame dimensions (from the input grayscale frame)
+            orig_h, orig_w = frame.shape[:2] 
+
             for i in range(len(scores)):
                 if int(classes[i]) == 0 and scores[i] > self.threshold:
                     ymin, xmin, ymax, xmax = boxes[i]
+                    # Bounding box coordinates are relative to the input size of the model (300x300)
+                    # Scale them to the original frame dimensions
                     detections.append({
-                        'bbox': [int(xmin * 640), int(ymin * 480), int((xmax-xmin)*640), int((ymax-ymin)*480)],
+                        'bbox': [
+                            int(xmin * orig_w), 
+                            int(ymin * orig_h), 
+                            int((xmax - xmin) * orig_w), 
+                            int((ymax - ymin) * orig_h)
+                        ],
                         'score': float(scores[i])
                     })
             return detections, 'CPU'
