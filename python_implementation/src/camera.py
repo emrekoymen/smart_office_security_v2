@@ -42,10 +42,10 @@ class CameraStream:
                     continue # Retry reading
             
             # Convert frame to grayscale
-            gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            # gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) # Reverted
 
             with self.lock:
-                self.frame = gray_frame.copy()
+                self.frame = frame.copy() # Use the original frame
             time.sleep(1 / self.fps) # Adhere to specified FPS
 
     def read(self):

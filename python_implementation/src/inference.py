@@ -79,28 +79,20 @@ class PersonDetector:
         # Debug interpreter status
         # print(f"[DEBUG][Inference] TPU_AVAILABLE={TPU_AVAILABLE}, tpu_failed={self.tpu_failed}, tpu_interp_loaded={self.interpreter_tpu is not None}, cpu_interp_loaded={self.interpreter_cpu is not None}")
         
-        # Input frame is already grayscale from CameraStream
+        # Input frame is BGR from CameraStream
         # Resize to model input size (e.g., 300x300)
         input_frame_resized = cv2.resize(frame, (300, 300))
 
-        # Ensure input_frame is (H, W, C) - for grayscale, C=1
-        if input_frame_resized.ndim == 2:  # Grayscale image (H, W)
-            input_frame_reshaped = np.expand_dims(input_frame_resized, axis=-1)  # (H, W, 1)
-        elif input_frame_resized.ndim == 3 and input_frame_resized.shape[2] == 1: # Already (H,W,1)
+        # Ensure input_frame is (H, W, C) - for BGR, C=3
+        if input_frame_resized.ndim == 3 and input_frame_resized.shape[2] == 3: # BGR image (H, W, 3)
             input_frame_reshaped = input_frame_resized
+        # elif input_frame_resized.ndim == 2:  # Grayscale image (H, W) - This path should not be taken now
+        #     input_frame_reshaped = np.expand_dims(input_frame_resized, axis=-1)  # (H, W, 1)
         else:
-            # This case should ideally not be reached if camera provides correct grayscale
-            # If it were BGR, we would convert: cv2.cvtColor(input_frame_resized, cv2.COLOR_BGR2GRAY)
-            # and then expand_dims. But since we expect grayscale, this is an error/unexpected state.
-            print(f"[ERROR][Inference] Unexpected frame dimensions: {input_frame_resized.shape}. Expected grayscale.")
-            # Fallback: try to take the first channel if it's 3-channel, or error out
-            if input_frame_resized.ndim == 3 and input_frame_resized.shape[2] == 3:
-                 print("[WARN][Inference] Taking first channel of 3-channel image as grayscale.")
-                 input_frame_reshaped = np.expand_dims(input_frame_resized[:,:,0], axis=-1)
-            else:
-                return [], 'NONE' # Cannot process
+            print(f"[ERROR][Inference] Unexpected frame dimensions: {input_frame_resized.shape}. Expected 3-channel BGR.")
+            return [], 'NONE' # Cannot process
 
-        # Add batch dimension: (1, H, W, 1)
+        # Add batch dimension: (1, H, W, 3)
         input_data = np.expand_dims(input_frame_reshaped, axis=0)
         input_data = input_data.astype(np.uint8)
 

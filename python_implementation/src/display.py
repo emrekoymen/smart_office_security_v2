@@ -9,9 +9,9 @@ class DisplayWindow:
     def draw_overlays(self, frame, bbox=None, score=None, fps=None):
         """Draws bounding boxes, scores, and FPS on the frame."""
         disp_frame = frame.copy()
-        # Frame is grayscale. Colors will be shades of gray.
-        # Using (255) for white, or other scalar values for shades of gray.
-        overlay_color = (255) # White for overlays
+        # Frame is BGR. Colors are BGR tuples.
+        # Using (255, 255, 255) for white.
+        overlay_color = (255, 255, 255) # White for overlays
 
         if bbox is not None and score is not None:
             # Ensure bbox coordinates are integers

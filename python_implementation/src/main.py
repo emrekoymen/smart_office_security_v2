@@ -199,7 +199,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--cam0', type=int, default=0, help='Camera 0 index')
     parser.add_argument('--cam1', type=int, default=2, help='Camera 1 index')
-    parser.add_argument('--model_tpu', type=str, default='models/ssd_mobilenet_v2_coco_quant_postprocess_edgetpu.tflite')
+    parser.add_argument('--model_tpu', type=str, default='output_tflite_graph_edgetpu.tflite')
     parser.add_argument('--model_cpu', type=str, default='models/ssd_mobilenet_v2_coco_quant_postprocess.tflite')
     parser.add_argument('--threshold', type=float, default=0.5)
     parser.add_argument('--headless', action='store_true', help='Run without display windows')

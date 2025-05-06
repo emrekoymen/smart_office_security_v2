@@ -27,8 +27,8 @@ def on_message(client, userdata, msg):
     global latest_frames, last_message_time
     try:
         nparr = np.frombuffer(msg.payload, np.uint8)
-        # Decode the JPEG image bytes as grayscale
-        frame = cv2.imdecode(nparr, cv2.IMREAD_GRAYSCALE)
+        # Decode the JPEG image bytes as color
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         if frame is not None:
             latest_frames[msg.topic] = frame
             last_message_time[msg.topic] = time.time()
@@ -63,17 +63,17 @@ def main(args):
                 cv2.imshow(WINDOW_CAM_0, frame0)
             else:
                 # Optional: Display a placeholder if no frame received yet or timeout
-                # Ensure placeholder is also grayscale (single channel)
-                placeholder = np.zeros((480, 640), dtype=np.uint8) 
-                cv2.putText(placeholder, "Waiting for Cam 0...", (50, 240), cv2.FONT_HERSHEY_SIMPLEX, 1, (255), 2)
+                # Ensure placeholder is 3-channel BGR
+                placeholder = np.zeros((480, 640, 3), dtype=np.uint8) 
+                cv2.putText(placeholder, "Waiting for Cam 0...", (50, 240), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
                 cv2.imshow(WINDOW_CAM_0, placeholder)
 
             if frame1 is not None:
                 cv2.imshow(WINDOW_CAM_1, frame1)
             else:
-                # Ensure placeholder is also grayscale (single channel)
-                placeholder = np.zeros((480, 640), dtype=np.uint8)
-                cv2.putText(placeholder, "Waiting for Cam 1...", (50, 240), cv2.FONT_HERSHEY_SIMPLEX, 1, (255), 2)
+                # Ensure placeholder is 3-channel BGR
+                placeholder = np.zeros((480, 640, 3), dtype=np.uint8)
+                cv2.putText(placeholder, "Waiting for Cam 1...", (50, 240), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
                 cv2.imshow(WINDOW_CAM_1, placeholder)
 
             if cv2.waitKey(1) & 0xFF == ord('q'):
