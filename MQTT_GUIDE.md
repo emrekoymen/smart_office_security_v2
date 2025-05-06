@@ -54,19 +54,31 @@ The application uses the following MQTT topics:
 
 *(Payload details omitted for brevity - see previous sections)*
 
-## 4. Building Receiving Applications (Conceptual)
+## 4. Main Computer Listener Scripts
 
-*(This section remains largely the same, outlining how to build clients for alerts, logs, and video.)*
+In the `python_implementation/main_computer_listeners/` directory, you'll find dedicated Python scripts to receive and process data from the Raspberry Pi:
+*   `video_viewer.py`: Displays the camera streams.
+*   `alert_listener.py`: Listens for and shows alerts.
+*   `log_saver.py`: Saves detection logs to JSON files.
 
-*   **Alert Notification:** Subscribe to `.../alert`, trigger OS notification.
-*   **Detection Log Saving:** Subscribe to `.../detection_log`, parse JSON, generate timestamped filename, save JSON string.
-*   **Video Stream Display:** Subscribe to `.../0/stream` and `.../1/stream`, decode JPEG bytes using OpenCV (`cv2.imdecode`), display in separate `cv2.imshow` windows.
+**Dependencies for Listener Scripts:**
+On your main computer, navigate to this directory and install its requirements:
+```bash
+cd path/to/smart_office_security_v2/python_implementation/main_computer_listeners
+pip install -r requirements.txt
+# If you want desktop notifications in alert_listener.py, also: pip install plyer
+```
 
 ## 5. Running the System (End-to-End Example)
 
-This section provides a step-by-step guide to run the system, assuming the broker (Section 1) and Pi dependencies (Section 2) are set up.
+This section provides a step-by-step guide to run the system.
 
-**On the Raspberry Pi:**
+**Prerequisites:**
+1.  MQTT Broker is installed and running on the main computer (Section 1).
+2.  Raspberry Pi application dependencies are installed (Section 2).
+3.  Main computer listener script dependencies are installed (Section 4).
+
+**A. On the Raspberry Pi:**
 
 1.  **SSH into the Raspberry Pi:**
     ```bash
@@ -78,103 +90,54 @@ This section provides a step-by-step guide to run the system, assuming the broke
     ```bash
     cd path/to/smart_office_security_v2/python_implementation
     ```
-    (Adjust the path as necessary)
+    (Adjust `path/to/` as necessary)
 
 3.  **Run the Main Application:**
     ```bash
     python3 src/main.py --mqtt-broker <MAIN_COMPUTER_IP> --cam0 <CAM0_INDEX> --cam1 <CAM1_INDEX>
     ```
-    *   Replace `<MAIN_COMPUTER_IP>` with the IP address of the computer running the Mosquitto broker (e.g., `192.168.5.135`).
-    *   Replace `<CAM0_INDEX>` and `<CAM1_INDEX>` with the correct video device indices for your cameras (e.g., `0` and `2`).
+    *   Replace `<MAIN_COMPUTER_IP>` with the IP address of your main computer (e.g., `192.168.5.135`).
+    *   Replace `<CAM0_INDEX>` and `<CAM1_INDEX>` with your camera indices (e.g., `0` and `2`).
     *   Add `--headless` if you don't want local display windows on the Pi itself.
 
-    The Pi should now connect to the MQTT broker and start sending alerts, logs (after 5s inactivity following detections), and continuous video streams.
+    The Pi will connect to the MQTT broker and start sending data.
 
-**On the Main Computer:**
+**B. On the Main Computer:**
 
-You need separate processes (terminals or a dedicated script) to listen for the different MQTT topics.
+You need to run each of the listener scripts in separate terminal windows.
+First, navigate to the listeners directory in each terminal:
+```bash
+cd path/to/smart_office_security_v2/python_implementation/main_computer_listeners
+```
+(Adjust `path/to/` as necessary)
 
-1.  **Ensure Mosquitto Broker is Running:** (See Section 1)
-
-2.  **Listen for Alerts (Terminal 1):**
-    Open a terminal and run:
+1.  **Run the Alert Listener (Terminal 1):**
     ```bash
-    mosquitto_sub -h localhost -t smart_office/camera/alert -v
+    python3 alert_listener.py --mqtt-broker <MAIN_COMPUTER_IP>
     ```
-    (Replace `localhost` with the broker IP if not running `mosquitto_sub` on the broker machine itself). You will see alert messages printed here when the Pi detects a person.
-    *For actual pop-up notifications, you would need a script using a library like `plyer` (Python) or `notify-send` (Linux).* 
+    *   Replace `<MAIN_COMPUTER_IP>` with your main computer's IP (or `localhost` if running the broker on the same machine).
+    *   Alerts will be printed to the console. For pop-up notifications, you'd modify the script to use a library like `plyer`.
 
-3.  **Listen for Detection Logs (Terminal 2):**
-    Open another terminal and run:
+2.  **Run the Log Saver (Terminal 2):**
     ```bash
-    mosquitto_sub -h localhost -t smart_office/camera/detection_log > detection_log_output.txt
+    python3 log_saver.py --mqtt-broker <MAIN_COMPUTER_IP>
     ```
-    This will print the raw JSON log data to the console (and optionally redirect to a file). 
-    *To save logs as individual timestamped JSON files, you need a script that subscribes, parses the JSON to find a timestamp (like `detection_period_end`), formats it (e.g., `YYYY-MM-DD-HH-MM-SS.json`), and saves the received JSON string.* 
+    *   Replace `<MAIN_COMPUTER_IP>` as above.
+    *   Detection logs will be saved as timestamped JSON files in a `detection_logs` subdirectory (created automatically).
 
-4.  **Display Video Streams (Python Script):**
-    You need a Python script to receive and display the video streams. Here is a basic example concept (`mqtt_video_viewer.py`):
-
-    ```python
-    # mqtt_video_viewer.py
-    import cv2
-    import paho.mqtt.client as mqtt
-    import numpy as np
-
-    MQTT_BROKER = "localhost" # Or your broker IP
-    MQTT_PORT = 1883
-    TOPIC_STREAM_0 = "smart_office/camera/0/stream"
-    TOPIC_STREAM_1 = "smart_office/camera/1/stream"
-
-    def on_connect(client, userdata, flags, rc):
-        print(f"Connected with result code {rc}")
-        client.subscribe([(TOPIC_STREAM_0, 0), (TOPIC_STREAM_1, 0)])
-
-    def on_message(client, userdata, msg):
-        try:
-            # Decode the JPEG image bytes
-            nparr = np.frombuffer(msg.payload, np.uint8)
-            frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-
-            if frame is not None:
-                window_name = "Camera 0 Stream" if msg.topic == TOPIC_STREAM_0 else "Camera 1 Stream"
-                cv2.imshow(window_name, frame)
-                if cv2.waitKey(1) & 0xFF == ord('q'): # Allow quitting by pressing 'q'
-                    client.disconnect()
-                    cv2.destroyAllWindows()
-            else:
-                print(f"Failed to decode frame from topic {msg.topic}")
-        except Exception as e:
-            print(f"Error processing message on {msg.topic}: {e}")
-
-    client = mqtt.Client()
-    client.on_connect = on_connect
-    client.on_message = on_message
-
-    # Create windows beforehand
-    cv2.namedWindow("Camera 0 Stream", cv2.WINDOW_NORMAL)
-    cv2.namedWindow("Camera 1 Stream", cv2.WINDOW_NORMAL)
-
-    client.connect(MQTT_BROKER, MQTT_PORT, 60)
-
-    try:
-        client.loop_forever()
-    except KeyboardInterrupt:
-        print("Disconnecting...")
-        client.disconnect()
-        cv2.destroyAllWindows()
-    ```
-    Save this script (e.g., as `mqtt_video_viewer.py`) on your main computer, ensure you have `opencv-python` and `paho-mqtt` installed (`pip install opencv-python paho-mqtt`), and run it:
+3.  **Run the Video Viewer (Terminal 3):**
     ```bash
-    python mqtt_video_viewer.py
+    python3 video_viewer.py --mqtt-broker <MAIN_COMPUTER_IP>
     ```
-    This script will open two windows displaying the live, annotated video streams from the Pi.
+    *   Replace `<MAIN_COMPUTER_IP>` as above.
+    *   Two OpenCV windows will open, displaying the live (grayscale) annotated video streams from "Camera 0 Stream" and "Camera 1 Stream". Press 'q' in one of these windows to close the viewer.
 
 **Expected Outcome:**
 
-*   The Pi runs `main.py`, performing inference and sending data via MQTT.
+*   The Raspberry Pi runs `src/main.py`, performing inference and sending processed grayscale frames, alerts, and log data via MQTT.
 *   On the main computer:
-    *   Terminal 1 shows incoming alert messages.
-    *   Terminal 2 shows incoming JSON log data.
-    *   The `mqtt_video_viewer.py` script shows two windows with the live, annotated camera feeds.
-    *   *(Actual notification pop-ups and individual JSON file saving require dedicated scripts as described)*. 
+    *   Terminal 1 (running `alert_listener.py`) shows incoming alert messages.
+    *   Terminal 2 (running `log_saver.py`) announces saved log files in the `detection_logs` directory.
+    *   Terminal 3 (running `video_viewer.py`) shows two windows with the live, annotated grayscale camera feeds.
+
+This setup provides the complete pipeline as requested. 
