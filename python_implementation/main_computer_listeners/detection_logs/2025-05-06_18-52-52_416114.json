@@ -1,0 +1,27 @@
+{
+    "detection_period_end": "2025-05-06T18:52:52.416114",
+    "camera_0_detections": [
+        {
+            "timestamp": "2025-05-06T18:52:46.002567",
+            "confidence": 0.58203125,
+            "bbox": [
+                435,
+                231,
+                199,
+                238
+            ]
+        }
+    ],
+    "camera_1_detections": [
+        {
+            "timestamp": "2025-05-06T18:52:47.283759",
+            "confidence": 0.58203125,
+            "bbox": [
+                4,
+                6,
+                292,
+                474
+            ]
+        }
+    ]
+}
