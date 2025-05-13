@@ -16,6 +16,10 @@ TOPIC_LOG = "smart_office/camera/detection_log"
 TOPIC_STREAM_0 = "smart_office/camera/0/stream"
 TOPIC_STREAM_1 = "smart_office/camera/1/stream"
 
+# Target processing FPS for the main loop
+TARGET_PROCESSING_FPS = 20.0
+TARGET_LOOP_INTERVAL = 1.0 / TARGET_PROCESSING_FPS
+
 
 def main(args):
     # --- MQTT Setup ---
@@ -49,6 +53,8 @@ def main(args):
 
     try:
         while True:
+            loop_start_time = time.time() # Record start time of the loop iteration
+
             # Frame acquisition with synchronization
             frame_left = None
             frame_right = None
@@ -76,93 +82,118 @@ def main(args):
                 print("[INFO] A camera stream has stopped. Exiting main processing loop.")
                 break
 
-            if frame_left is None or frame_right is None:
-                print("[INFO] Skipping processing cycle due to missing frame(s) after acquisition attempt. One or both cameras might be struggling.")
-                time.sleep(0.1) # Give a bit more time before retrying
-                continue
+            current_time = time.time()
+            jpeg_quality = [int(cv2.IMWRITE_JPEG_QUALITY), 75] # Define once
 
-            current_time = time.time() # Moved here, as it's used after frames are acquired
             # --- Process Left Camera ---
-            start_left = time.time()
-            detections_left, engine_left = detector.detect(frame_left)
-            processed_detections_left = []
-            person_detected_left = False
-            # disp_frame_left = frame_left.copy() # Base frame for drawing
+            if frame_left is not None:
+                start_left = time.time()
+                detections_left, engine_left = detector.detect(frame_left)
+                processed_detections_left = []
+                person_detected_left = False
 
-            for det in detections_left:
-                temp_bbox = None
-                temp_score = None
-                if hasattr(det, 'score') and hasattr(det, 'bbox'): # PyCoral output
-                    temp_score = det.score
-                    bbox = det.bbox
-                    h, w = frame_left.shape[:2]
-                    model_input_w, model_input_h = 480.0, 480.0
-                    scale_x, scale_y = w / model_input_w, h / model_input_h
-                    temp_bbox = [
-                        int(bbox.xmin * scale_x), int(bbox.ymin * scale_y),
-                        int(bbox.width * scale_x), int(bbox.height * scale_y)
-                    ]
-                elif isinstance(det, dict) and 'score' in det and 'bbox' in det: # CPU fallback output
-                    temp_score = det['score']
-                    temp_bbox = det['bbox']
+                for det in detections_left:
+                    temp_bbox = None
+                    temp_score = None
+                    if hasattr(det, 'score') and hasattr(det, 'bbox'): # PyCoral output
+                        temp_score = det.score
+                        bbox = det.bbox
+                        h, w = frame_left.shape[:2]
+                        model_input_w, model_input_h = 480.0, 480.0
+                        scale_x, scale_y = w / model_input_w, h / model_input_h
+                        temp_bbox = [
+                            int(bbox.xmin * scale_x), int(bbox.ymin * scale_y),
+                            int(bbox.width * scale_x), int(bbox.height * scale_y)
+                        ]
+                    elif isinstance(det, dict) and 'score' in det and 'bbox' in det: # CPU fallback output
+                        temp_score = det['score']
+                        temp_bbox = det['bbox']
 
-                if temp_score is not None and temp_bbox is not None:
-                    processed_detections_left.append({'bbox': temp_bbox, 'score': temp_score})
+                    if temp_score is not None and temp_bbox is not None:
+                        processed_detections_left.append({'bbox': temp_bbox, 'score': temp_score})
+                        detection_data = {
+                            "timestamp": datetime.now().isoformat(),
+                            "confidence": float(temp_score),
+                            "bbox": temp_bbox
+                        }
+                        detection_buffer_cam0.append(detection_data)
+                        person_detected_left = True
+                
+                if person_detected_left:
+                     last_detection_time = current_time
+                     alert_msg = f"Unauthorized Entrance! Person Detected from Camera 0"
+                     mqtt_client.publish(TOPIC_ALERT, alert_msg, qos=1)
 
-                    detection_data = {
-                        "timestamp": datetime.now().isoformat(),
-                        "confidence": float(temp_score),
-                        "bbox": temp_bbox
-                    }
-                    detection_buffer_cam0.append(detection_data)
-                    person_detected_left = True
+                # Calculate FPS, Draw Overlays
+                display_fps_left = cam_left.fps # Use configured camera FPS for display
+                annotated_frame_left = drawer_left.draw_overlays(frame_left, detections=processed_detections_left, fps=display_fps_left)
+                
+                if not args.headless:
+                    cv2.imshow(drawer_left.window_name, annotated_frame_left)
 
-            if person_detected_left:
-                 last_detection_time = current_time
-                 alert_msg = f"Unauthorized Entrance! Person Detected from Camera 0"
-                 mqtt_client.publish(TOPIC_ALERT, alert_msg, qos=1)
-
+                # Stream Left Frame
+                ret_l, buffer_l = cv2.imencode('.jpg', annotated_frame_left, jpeg_quality)
+                if ret_l:
+                    mqtt_client.publish(TOPIC_STREAM_0, buffer_l.tobytes(), qos=0)
+                else:
+                    print("[WARN] Failed to encode left frame for MQTT.")
+            else:
+                print("[INFO] No frame from left camera to process this cycle.")
 
             # --- Process Right Camera ---
-            start_right = time.time()
-            detections_right, engine_right = detector.detect(frame_right)
-            processed_detections_right = []
-            person_detected_right = False
-            # disp_frame_right = frame_right.copy() # Base frame for drawing
+            if frame_right is not None:
+                start_right = time.time()
+                detections_right, engine_right = detector.detect(frame_right)
+                processed_detections_right = []
+                person_detected_right = False
 
-            for det in detections_right:
-                temp_bbox = None
-                temp_score = None
-                if hasattr(det, 'score') and hasattr(det, 'bbox'): # PyCoral output
-                    temp_score = det.score
-                    bbox = det.bbox
-                    h, w = frame_right.shape[:2]
-                    model_input_w, model_input_h = 480.0, 480.0
-                    scale_x, scale_y = w / model_input_w, h / model_input_h
-                    temp_bbox = [
-                        int(bbox.xmin * scale_x), int(bbox.ymin * scale_y),
-                        int(bbox.width * scale_x), int(bbox.height * scale_y)
-                    ]
-                elif isinstance(det, dict) and 'score' in det and 'bbox' in det: # CPU fallback output
-                    temp_score = det['score']
-                    temp_bbox = det['bbox']
+                for det in detections_right:
+                    temp_bbox = None
+                    temp_score = None
+                    if hasattr(det, 'score') and hasattr(det, 'bbox'): # PyCoral output
+                        temp_score = det.score
+                        bbox = det.bbox
+                        h, w = frame_right.shape[:2]
+                        model_input_w, model_input_h = 480.0, 480.0
+                        scale_x, scale_y = w / model_input_w, h / model_input_h
+                        temp_bbox = [
+                            int(bbox.xmin * scale_x), int(bbox.ymin * scale_y),
+                            int(bbox.width * scale_x), int(bbox.height * scale_y)
+                        ]
+                    elif isinstance(det, dict) and 'score' in det and 'bbox' in det: # CPU fallback output
+                        temp_score = det['score']
+                        temp_bbox = det['bbox']
 
-                if temp_score is not None and temp_bbox is not None:
-                    processed_detections_right.append({'bbox': temp_bbox, 'score': temp_score})
+                    if temp_score is not None and temp_bbox is not None:
+                        processed_detections_right.append({'bbox': temp_bbox, 'score': temp_score})
+                        detection_data = {
+                            "timestamp": datetime.now().isoformat(),
+                            "confidence": float(temp_score),
+                            "bbox": temp_bbox
+                        }
+                        detection_buffer_cam1.append(detection_data)
+                        person_detected_right = True
 
-                    detection_data = {
-                        "timestamp": datetime.now().isoformat(),
-                        "confidence": float(temp_score),
-                        "bbox": temp_bbox
-                    }
-                    detection_buffer_cam1.append(detection_data)
-                    person_detected_right = True
+                if person_detected_right:
+                     last_detection_time = current_time
+                     alert_msg = f"Unauthorized Entrance! Person Detected from Camera 1"
+                     mqtt_client.publish(TOPIC_ALERT, alert_msg, qos=1)
 
-            if person_detected_right:
-                 last_detection_time = current_time
-                 alert_msg = f"Unauthorized Entrance! Person Detected from Camera 1"
-                 mqtt_client.publish(TOPIC_ALERT, alert_msg, qos=1)
+                # Calculate FPS, Draw Overlays
+                display_fps_right = cam_right.fps # Use configured camera FPS for display
+                annotated_frame_right = drawer_right.draw_overlays(frame_right, detections=processed_detections_right, fps=display_fps_right)
 
+                if not args.headless:
+                     cv2.imshow(drawer_right.window_name, annotated_frame_right)
+
+                # Stream Right Frame
+                ret_r, buffer_r = cv2.imencode('.jpg', annotated_frame_right, jpeg_quality)
+                if ret_r:
+                    mqtt_client.publish(TOPIC_STREAM_1, buffer_r.tobytes(), qos=0)
+                else:
+                    print("[WARN] Failed to encode right frame for MQTT.")
+            else:
+                print("[INFO] No frame from right camera to process this cycle.")
 
             # --- Check for logging buffer timeout ---
             if last_detection_time > 0 and (current_time - last_detection_time) > 5.0:
@@ -178,36 +209,16 @@ def main(args):
                     detection_buffer_cam1 = []
                 last_detection_time = 0.0
 
-            # --- Calculate FPS, Draw Overlays, and Display/Stream ---
-            now_left = time.time()
-            fps_left = 1.0 / max(now_left - start_left, 1e-6)
-            # Get annotated frame from drawer (always needed for stream)
-            annotated_frame_left = drawer_left.draw_overlays(frame_left, detections=processed_detections_left, fps=fps_left)
-            # Display locally ONLY if not headless
-            if not args.headless:
-                cv2.imshow(drawer_left.window_name, annotated_frame_left)
-
-            now_right = time.time()
-            fps_right = 1.0 / max(now_right - start_right, 1e-6)
-            # Get annotated frame from drawer (always needed for stream)
-            annotated_frame_right = drawer_right.draw_overlays(frame_right, detections=processed_detections_right, fps=fps_right)
-            # Display locally ONLY if not headless
-            if not args.headless:
-                 cv2.imshow(drawer_right.window_name, annotated_frame_right)
-
-            # --- Stream Frames ---
-            jpeg_quality = [int(cv2.IMWRITE_JPEG_QUALITY), 75]
-            ret_l, buffer_l = cv2.imencode('.jpg', annotated_frame_left, jpeg_quality)
-            ret_r, buffer_r = cv2.imencode('.jpg', annotated_frame_right, jpeg_quality)
-
-            if ret_l:
-                mqtt_client.publish(TOPIC_STREAM_0, buffer_l.tobytes(), qos=0)
-            if ret_r:
-                mqtt_client.publish(TOPIC_STREAM_1, buffer_r.tobytes(), qos=0)
-
             # Quit condition
             if not args.headless and cv2.waitKey(1) & 0xFF == ord('q'):
                 break
+
+            # --- Throttle the main loop to target processing FPS ---
+            loop_elapsed_time = time.time() - loop_start_time
+            sleep_duration = TARGET_LOOP_INTERVAL - loop_elapsed_time
+            if sleep_duration > 0:
+                time.sleep(sleep_duration)
+
     finally:
         print("Cleaning up...")
         cam_left.stop()
