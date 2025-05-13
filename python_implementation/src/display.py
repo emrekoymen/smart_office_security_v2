@@ -6,19 +6,24 @@ class DisplayWindow:
         self.window_name = window_name
         # cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL) # Moved to main.py
 
-    def draw_overlays(self, frame, bbox=None, score=None, fps=None):
+    def draw_overlays(self, frame, detections=None, fps=None):
         """Draws bounding boxes, scores, and FPS on the frame."""
         disp_frame = frame.copy()
         # Frame is BGR. Colors are BGR tuples.
         # Using (255, 255, 255) for white.
         overlay_color = (255, 255, 255) # White for overlays
 
-        if bbox is not None and score is not None:
-            # Ensure bbox coordinates are integers
-            x, y, w, h = map(int, bbox)
-            cv2.rectangle(disp_frame, (x, y), (x + w, y + h), overlay_color, 2)
-            label = f"Person: {score:.2f}"
-            cv2.putText(disp_frame, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, overlay_color, 2)
+        if detections:
+            for det_data in detections:
+                bbox = det_data.get('bbox')
+                score = det_data.get('score')
+                if bbox is not None and score is not None:
+                    # Ensure bbox coordinates are integers
+                    x, y, w, h = map(int, bbox)
+                    cv2.rectangle(disp_frame, (x, y), (x + w, y + h), overlay_color, 2)
+                    label = f"Person: {score:.2f}"
+                    cv2.putText(disp_frame, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, overlay_color, 2)
+        
         if fps is not None:
             # For FPS text, also use a grayscale color. White should be fine.
             cv2.putText(disp_frame, f"FPS: {fps:.1f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, overlay_color, 2)

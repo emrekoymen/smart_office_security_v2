@@ -49,17 +49,43 @@ def main(args):
 
     try:
         while True:
-            current_time = time.time()
-            frame_left = cam_left.read()
-            frame_right = cam_right.read()
+            # Frame acquisition with synchronization
+            frame_left = None
+            frame_right = None
+            
+            acquisition_start_time = time.time()
+            ACQUISITION_TIMEOUT_SECONDS = 2.0 # Wait up to 2 seconds for frames
+
+            while not (cam_left.stopped or cam_right.stopped): # Continue trying if streams are active
+                if frame_left is None:
+                    frame_left = cam_left.read()
+                
+                if frame_right is None:
+                    frame_right = cam_right.read()
+
+                if frame_left is not None and frame_right is not None:
+                    break # Got both frames
+
+                if time.time() - acquisition_start_time > ACQUISITION_TIMEOUT_SECONDS:
+                    print("[WARN] Timeout waiting for frames from both cameras during acquisition attempt.")
+                    break 
+                
+                time.sleep(0.01) # Brief pause to yield CPU if waiting
+
+            if cam_left.stopped or cam_right.stopped:
+                print("[INFO] A camera stream has stopped. Exiting main processing loop.")
+                break
+
             if frame_left is None or frame_right is None:
-                time.sleep(0.01)
+                print("[INFO] Skipping processing cycle due to missing frame(s) after acquisition attempt. One or both cameras might be struggling.")
+                time.sleep(0.1) # Give a bit more time before retrying
                 continue
 
+            current_time = time.time() # Moved here, as it's used after frames are acquired
             # --- Process Left Camera ---
             start_left = time.time()
             detections_left, engine_left = detector.detect(frame_left)
-            bbox_left, score_left = None, None
+            processed_detections_left = []
             person_detected_left = False
             # disp_frame_left = frame_left.copy() # Base frame for drawing
 
@@ -70,7 +96,8 @@ def main(args):
                     temp_score = det.score
                     bbox = det.bbox
                     h, w = frame_left.shape[:2]
-                    scale_x, scale_y = w / 300.0, h / 300.0
+                    model_input_w, model_input_h = 480.0, 480.0
+                    scale_x, scale_y = w / model_input_w, h / model_input_h
                     temp_bbox = [
                         int(bbox.xmin * scale_x), int(bbox.ymin * scale_y),
                         int(bbox.width * scale_x), int(bbox.height * scale_y)
@@ -80,9 +107,7 @@ def main(args):
                     temp_bbox = det['bbox']
 
                 if temp_score is not None and temp_bbox is not None:
-                    if score_left is None: # Take the first one for display/drawing
-                         score_left = temp_score
-                         bbox_left = temp_bbox
+                    processed_detections_left.append({'bbox': temp_bbox, 'score': temp_score})
 
                     detection_data = {
                         "timestamp": datetime.now().isoformat(),
@@ -101,7 +126,7 @@ def main(args):
             # --- Process Right Camera ---
             start_right = time.time()
             detections_right, engine_right = detector.detect(frame_right)
-            bbox_right, score_right = None, None
+            processed_detections_right = []
             person_detected_right = False
             # disp_frame_right = frame_right.copy() # Base frame for drawing
 
@@ -112,7 +137,8 @@ def main(args):
                     temp_score = det.score
                     bbox = det.bbox
                     h, w = frame_right.shape[:2]
-                    scale_x, scale_y = w / 300.0, h / 300.0
+                    model_input_w, model_input_h = 480.0, 480.0
+                    scale_x, scale_y = w / model_input_w, h / model_input_h
                     temp_bbox = [
                         int(bbox.xmin * scale_x), int(bbox.ymin * scale_y),
                         int(bbox.width * scale_x), int(bbox.height * scale_y)
@@ -122,9 +148,7 @@ def main(args):
                     temp_bbox = det['bbox']
 
                 if temp_score is not None and temp_bbox is not None:
-                    if score_right is None: # Take the first one for display/drawing
-                         score_right = temp_score
-                         bbox_right = temp_bbox
+                    processed_detections_right.append({'bbox': temp_bbox, 'score': temp_score})
 
                     detection_data = {
                         "timestamp": datetime.now().isoformat(),
@@ -158,7 +182,7 @@ def main(args):
             now_left = time.time()
             fps_left = 1.0 / max(now_left - start_left, 1e-6)
             # Get annotated frame from drawer (always needed for stream)
-            annotated_frame_left = drawer_left.draw_overlays(frame_left, bbox=bbox_left, score=score_left, fps=fps_left)
+            annotated_frame_left = drawer_left.draw_overlays(frame_left, detections=processed_detections_left, fps=fps_left)
             # Display locally ONLY if not headless
             if not args.headless:
                 cv2.imshow(drawer_left.window_name, annotated_frame_left)
@@ -166,7 +190,7 @@ def main(args):
             now_right = time.time()
             fps_right = 1.0 / max(now_right - start_right, 1e-6)
             # Get annotated frame from drawer (always needed for stream)
-            annotated_frame_right = drawer_right.draw_overlays(frame_right, bbox=bbox_right, score=score_right, fps=fps_right)
+            annotated_frame_right = drawer_right.draw_overlays(frame_right, detections=processed_detections_right, fps=fps_right)
             # Display locally ONLY if not headless
             if not args.headless:
                  cv2.imshow(drawer_right.window_name, annotated_frame_right)

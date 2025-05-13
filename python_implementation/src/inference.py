@@ -81,7 +81,7 @@ class PersonDetector:
         
         # Input frame is BGR from CameraStream
         # Resize to model input size (e.g., 300x300)
-        input_frame_resized = cv2.resize(frame, (300, 300))
+        input_frame_resized = cv2.resize(frame, (480, 480))
 
         # Ensure input_frame is (H, W, C) - for BGR, C=3
         if input_frame_resized.ndim == 3 and input_frame_resized.shape[2] == 3: # BGR image (H, W, 3)
@@ -99,16 +99,19 @@ class PersonDetector:
         # Try TPU first
         if TPU_AVAILABLE and not self.tpu_failed and self.interpreter_tpu:
             try:
+                print("[DEBUG][Inference] Attempting TPU execution.")
                 self.interpreter_tpu.set_tensor(self.interpreter_tpu.get_input_details()[0]['index'], input_data)
                 self.interpreter_tpu.invoke()
                 objs = get_objects(self.interpreter_tpu, self.threshold)
                 # Filter for person class only (index 0)
                 filtered = [o for o in objs if hasattr(o, 'id') and o.id == 0]
                 return filtered, 'TPU'
-            except Exception:
+            except Exception as e:
+                print(f"[ERROR][Inference] TPU execution failed: {e}")
                 self.tpu_failed = True
         # Fallback to CPU
         if self.interpreter_cpu:
+            print("[DEBUG][Inference] Attempting CPU execution.")
             self.interpreter_cpu.set_tensor(self.interpreter_cpu.get_input_details()[0]['index'], input_data)
             self.interpreter_cpu.invoke()
             output_details = self.interpreter_cpu.get_output_details()
