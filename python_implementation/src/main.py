@@ -20,9 +20,6 @@ TOPIC_STREAM_1 = "smart_office/camera/1/stream"
 TARGET_PROCESSING_FPS = 20.0
 TARGET_LOOP_INTERVAL = 1.0 / TARGET_PROCESSING_FPS
 
-# Initialize overall loop FPS
-overall_loop_fps = 0.0
-
 def main(args):
     # --- MQTT Setup ---
     mqtt_client = MQTTClient(args.mqtt_broker, args.mqtt_port)
@@ -64,6 +61,7 @@ def main(args):
     last_detection_time = 0.0 # Timestamp of the last detection event on *any* camera
     left_detection_fps = 0.0 # Initialize FPS for left camera detection display
     right_detection_fps = 0.0 # Initialize FPS for right camera detection display
+    overall_loop_fps = 0.0 # Initialize overall_loop_fps here
 
     try:
         while True:
