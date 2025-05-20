@@ -2,10 +2,10 @@
 import paho.mqtt.client as mqtt
 import argparse
 import time
+from plyer import notification
 
 # For actual desktop notifications, you would typically use a library like 'plyer'.
 # Example (requires 'pip install plyer'):
-# from plyer import notification
 # notification.notify(
 #     title='Smart Office Alert',
 #     message=alert_message,
@@ -32,6 +32,17 @@ def on_message(client, userdata, msg):
     # To trigger a desktop notification, you would call a function here.
     # e.g., using plyer as shown in the comments at the top of the file.
     # For now, it just prints to console.
+    try:
+        notification.notify(
+            title='Smart Office Security Alert!',
+            message=alert_message,
+            app_name='Smart Office Alert Listener',
+            timeout=10  # Notification will disappear after 10 seconds
+        )
+        print("[AlertLis] Desktop notification sent.")
+    except Exception as e:
+        print(f"[AlertLis] Failed to send desktop notification: {e}")
+        print("[AlertLis] Ensure 'plyer' is installed and you have a notification server running (e.g., notify-osd).")
 
 def main(args):
     client = mqtt.Client(client_id=f"alert-listener-{int(time.time())}", callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
