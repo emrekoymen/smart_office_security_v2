@@ -101,10 +101,14 @@ class PersonDetector:
             try:
                 print("[DEBUG][Inference] Attempting TPU execution.")
                 self.interpreter_tpu.set_tensor(self.interpreter_tpu.get_input_details()[0]['index'], input_data)
+                print("[DEBUG][Inference] TPU: Tensor set. Invoking interpreter...")
                 self.interpreter_tpu.invoke()
+                print("[DEBUG][Inference] TPU: Interpreter invoked successfully.")
                 objs = get_objects(self.interpreter_tpu, self.threshold)
+                print("[DEBUG][Inference] TPU: Objects retrieved.")
                 # Filter for person class only (index 0)
                 filtered = [o for o in objs if hasattr(o, 'id') and o.id == 0]
+                print("[DEBUG][Inference] TPU: Objects filtered.")
                 return filtered, 'TPU'
             except Exception as e:
                 print(f"[ERROR][Inference] TPU execution failed: {e}")
