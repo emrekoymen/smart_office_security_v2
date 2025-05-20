@@ -67,31 +67,22 @@ def main(args):
         while True:
             loop_start_time = time.time() # Record start time of the loop iteration
 
-            # Frame acquisition with synchronization
+            # Frame acquisition
             frame_left = None
+            if not cam_left.stopped:
+                frame_left = cam_left.read()
+                # Optional: if frame_left is None and not cam_left.stopped:
+                #     print("[WARN] Failed to read frame from active left camera, though stream not marked as stopped yet.")
+
             frame_right = None
+            if not cam_right.stopped:
+                frame_right = cam_right.read()
+                # Optional: if frame_right is None and not cam_right.stopped:
+                #     print("[WARN] Failed to read frame from active right camera, though stream not marked as stopped yet.")
             
-            acquisition_start_time = time.time()
-            ACQUISITION_TIMEOUT_SECONDS = 2.0 # Wait up to 2 seconds for frames
-
-            while not (cam_left.stopped or cam_right.stopped): # Continue trying if streams are active
-                if frame_left is None:
-                    frame_left = cam_left.read()
-                
-                if frame_right is None:
-                    frame_right = cam_right.read()
-
-                if frame_left is not None and frame_right is not None:
-                    break # Got both frames
-
-                if time.time() - acquisition_start_time > ACQUISITION_TIMEOUT_SECONDS:
-                    print("[WARN] Timeout waiting for frames from both cameras during acquisition attempt.")
-                    break 
-                
-                time.sleep(0.01) # Brief pause to yield CPU if waiting
-
-            if cam_left.stopped or cam_right.stopped:
-                print("[INFO] A camera stream has stopped. Exiting main processing loop.")
+            # Exit main loop only if BOTH cameras are stopped
+            if cam_left.stopped and cam_right.stopped:
+                print("[INFO] Both camera streams have stopped. Exiting main processing loop.")
                 break
 
             current_time = time.time()
@@ -153,9 +144,13 @@ def main(args):
                 if ret_l:
                     mqtt_client.publish(TOPIC_STREAM_0, buffer_l.tobytes(), qos=0)
                 else:
-                    print("[WARN] Failed to encode left frame for MQTT.")
+                    if not cam_left.stopped: # Camera is supposed to be active but gave no frame
+                        print("[WARN] Left camera: No frame to process this cycle, but stream is reported active.")
+                    # If cam_left.stopped is True, we just skip, no message needed as it's expected.
             else:
-                print("[INFO] No frame from left camera to process this cycle.")
+                if not cam_left.stopped: # Camera is supposed to be active but gave no frame
+                    print("[WARN] Left camera: No frame to process this cycle, but stream is reported active.")
+                # If cam_left.stopped is True, we just skip, no message needed as it's expected.
 
             # --- Process Right Camera ---
             if frame_right is not None:
@@ -213,9 +208,13 @@ def main(args):
                 if ret_r:
                     mqtt_client.publish(TOPIC_STREAM_1, buffer_r.tobytes(), qos=0)
                 else:
-                    print("[WARN] Failed to encode right frame for MQTT.")
+                    if not cam_right.stopped: # Camera is supposed to be active but gave no frame
+                        print("[WARN] Right camera: No frame to process this cycle, but stream is reported active.")
+                    # If cam_right.stopped is True, we just skip.
             else:
-                print("[INFO] No frame from right camera to process this cycle.")
+                if not cam_right.stopped: # Camera is supposed to be active but gave no frame
+                    print("[WARN] Right camera: No frame to process this cycle, but stream is reported active.")
+                # If cam_right.stopped is True, we just skip.
 
             # --- Check for logging buffer timeout ---
             if last_detection_time > 0 and (current_time - last_detection_time) > 5.0:
