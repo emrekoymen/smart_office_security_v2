@@ -63,6 +63,13 @@ def main(args):
     left_detection_fps = 0.0 # Initialize FPS for left camera detection display
     right_detection_fps = 0.0 # Initialize FPS for right camera detection display
 
+    # --- State for granular person presence alerts ---
+    person_continuously_present_cam0 = False
+    last_person_seen_time_cam0 = 0.0
+    person_continuously_present_cam1 = False
+    last_person_seen_time_cam1 = 0.0
+    NO_PERSON_GRACE_PERIOD = 2.5  # Seconds before declaring a person "gone"
+
     try:
         while True:
             loop_start_time = time.time() # Record start time of the loop iteration
@@ -130,9 +137,19 @@ def main(args):
                         person_detected_left = True
                 
                 if person_detected_left:
-                     last_detection_time = current_time
-                     alert_msg = f"Unauthorized Entrance! Person Detected from Camera 0"
-                     mqtt_client.publish(TOPIC_ALERT, alert_msg, qos=1)
+                     last_person_seen_time_cam0 = current_time # Update when person is seen
+                     if not person_continuously_present_cam0:
+                         person_continuously_present_cam0 = True
+                         alert_payload = {
+                             "status": "PERSON_DETECTED",
+                             "camera_id": "Camera 0",
+                             "message": f"Unauthorized Entrance! Person Detected from Camera 0 at {datetime.now().strftime('%H:%M:%S')}"
+                         }
+                         mqtt_client.publish(TOPIC_ALERT, alert_payload, qos=1)
+                         print("[MQTT] Sent PERSON_DETECTED alert for Camera 0")
+                     last_detection_time = current_time # Global log timer
+                # else: # This 'else' would be if person_detected_left is false for the current frame
+                    # The 'gone' logic is handled later based on timeout
 
                 # Calculate FPS, Draw Overlays
                 annotated_frame_left = drawer_left.draw_overlays(frame_left, detections=processed_detections_left, fps=left_detection_fps)
@@ -198,9 +215,19 @@ def main(args):
                         person_detected_right = True
 
                 if person_detected_right:
-                     last_detection_time = current_time
-                     alert_msg = f"Unauthorized Entrance! Person Detected from Camera 1"
-                     mqtt_client.publish(TOPIC_ALERT, alert_msg, qos=1)
+                     last_person_seen_time_cam1 = current_time # Update when person is seen
+                     if not person_continuously_present_cam1:
+                         person_continuously_present_cam1 = True
+                         alert_payload = {
+                             "status": "PERSON_DETECTED",
+                             "camera_id": "Camera 1",
+                             "message": f"Unauthorized Entrance! Person Detected from Camera 1 at {datetime.now().strftime('%H:%M:%S')}"
+                         }
+                         mqtt_client.publish(TOPIC_ALERT, alert_payload, qos=1)
+                         print("[MQTT] Sent PERSON_DETECTED alert for Camera 1")
+                     last_detection_time = current_time # Global log timer
+                # else: # This 'else' for person_detected_right is false
+                    # The 'gone' logic is handled later
 
                 # Calculate FPS, Draw Overlays
                 annotated_frame_right = drawer_right.draw_overlays(frame_right, detections=processed_detections_right, fps=right_detection_fps)
@@ -224,8 +251,36 @@ def main(args):
                 elif not cam_right.stopped and frame_right is None: # Debug / transient state
                     print(f"[INFO] Right camera ({args.cam1}) is active but no frame was processed/available this cycle.")
 
+            # --- Check for person disappearance (after processing both cameras) ---
+            # Use a consistent current time for these checks
+            current_time_for_disappearance_check = time.time()
+
+            if (person_continuously_present_cam0 and
+               (current_time_for_disappearance_check - last_person_seen_time_cam0 > NO_PERSON_GRACE_PERIOD)):
+                # This implies person_detected_left has been false for NO_PERSON_GRACE_PERIOD
+                person_continuously_present_cam0 = False
+                status_payload = {
+                    "status": "PERSON_GONE",
+                    "camera_id": "Camera 0",
+                    "message": f"Person no longer detected at Camera 0 ({datetime.now().strftime('%H:%M:%S')})"
+                }
+                mqtt_client.publish(TOPIC_ALERT, status_payload, qos=1) # Send to same alert topic
+                print(f"[MQTT] Sent PERSON_GONE for Cam0. Grace: {current_time_for_disappearance_check - last_person_seen_time_cam0:.1f}s.")
+
+            if (person_continuously_present_cam1 and
+               (current_time_for_disappearance_check - last_person_seen_time_cam1 > NO_PERSON_GRACE_PERIOD)):
+                # This implies person_detected_right has been false for NO_PERSON_GRACE_PERIOD
+                person_continuously_present_cam1 = False
+                status_payload = {
+                    "status": "PERSON_GONE",
+                    "camera_id": "Camera 1",
+                    "message": f"Person no longer detected at Camera 1 ({datetime.now().strftime('%H:%M:%S')})"
+                }
+                mqtt_client.publish(TOPIC_ALERT, status_payload, qos=1) # Send to same alert topic
+                print(f"[MQTT] Sent PERSON_GONE for Cam1. Grace: {current_time_for_disappearance_check - last_person_seen_time_cam1:.1f}s.")
+
             # --- Check for logging buffer timeout ---
-            if last_detection_time > 0 and (current_time - last_detection_time) > 5.0:
+            if last_detection_time > 0 and (current_time - last_detection_time) > 5.0: # Check global log timer
                 if detection_buffer_cam0 or detection_buffer_cam1:
                     print(f"[MQTT] Sending detection log ({(current_time - last_detection_time):.1f}s since last detection)")
                     log_payload = {
