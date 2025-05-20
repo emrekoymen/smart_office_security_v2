@@ -87,12 +87,15 @@ def main(args):
 
             # --- Process Left Camera ---
             if frame_left is not None:
+                print("[DEBUG][Main] Left camera: Frame received. Detecting...")
                 start_left = time.time()
                 detections_left, engine_left = detector.detect(frame_left)
+                print(f"[DEBUG][Main] Left camera: Detection complete. Engine: {engine_left}, Detections: {len(detections_left)}")
                 processed_detections_left = []
                 person_detected_left = False
 
-                for det in detections_left:
+                for i, det in enumerate(detections_left):
+                    print(f"[DEBUG][Main] Left camera: Processing detection {i+1}/{len(detections_left)}")
                     temp_bbox = None
                     temp_score = None
                     if hasattr(det, 'score') and hasattr(det, 'bbox'): # PyCoral output
@@ -110,6 +113,7 @@ def main(args):
                         temp_bbox = det['bbox']
 
                     if temp_score is not None and temp_bbox is not None:
+                        print(f"[DEBUG][Main] Left camera: Valid detection {i+1} found. Score: {temp_score:.2f}")
                         processed_detections_left.append({'bbox': temp_bbox, 'score': temp_score})
                         detection_data = {
                             "timestamp": datetime.now().isoformat(),
@@ -118,27 +122,38 @@ def main(args):
                         }
                         detection_buffer_cam0.append(detection_data)
                         person_detected_left = True
+                    else:
+                        print(f"[DEBUG][Main] Left camera: Detection {i+1} ignored (no score/bbox).")
                 
                 if person_detected_left:
+                     print("[DEBUG][Main] Left camera: Person detected. Updating last_detection_time and sending MQTT alert.")
                      last_detection_time = current_time
                      alert_msg = f"Unauthorized Entrance! Person Detected from Camera 0"
                      mqtt_client.publish(TOPIC_ALERT, alert_msg, qos=1)
+                     print("[DEBUG][Main] Left camera: MQTT alert sent.")
 
                 # Calculate FPS, Draw Overlays
+                print("[DEBUG][Main] Left camera: Preparing overlays.")
                 display_fps_left = cam_left.fps # Use configured camera FPS for display
                 annotated_frame_left = drawer_left.draw_overlays(frame_left, detections=processed_detections_left, fps=display_fps_left)
+                print("[DEBUG][Main] Left camera: Overlays drawn.")
                 
                 if not args.headless:
+                    print("[DEBUG][Main] Left camera: Showing frame.")
                     cv2.imshow(drawer_left.window_name, annotated_frame_left)
+                    print("[DEBUG][Main] Left camera: Frame shown.")
 
                 # Stream Left Frame
+                print("[DEBUG][Main] Left camera: Encoding frame for MQTT stream.")
                 ret_l, buffer_l = cv2.imencode('.jpg', annotated_frame_left, jpeg_quality)
                 if ret_l:
+                    print("[DEBUG][Main] Left camera: Frame encoded. Publishing to MQTT stream.")
                     mqtt_client.publish(TOPIC_STREAM_0, buffer_l.tobytes(), qos=0)
+                    print("[DEBUG][Main] Left camera: Frame published to MQTT stream.")
                 else:
-                    print("[WARN] Failed to encode left frame for MQTT.")
+                    print("[WARN][Main] Left camera: Failed to encode frame for MQTT.")
             else:
-                print("[INFO] No frame from left camera to process this cycle.")
+                print("[DEBUG][Main] No frame from left camera to process this cycle.")
 
             # --- Process Right Camera ---
             if frame_right is not None:
