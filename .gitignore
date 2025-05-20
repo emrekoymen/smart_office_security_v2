@@ -1,2 +1,4 @@
 cpp_implementation/build/
 .vscode/ 
+src/**/__pycache__/
+main_computer_listeners/detection_logs/ 
