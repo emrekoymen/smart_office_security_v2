@@ -20,6 +20,7 @@ TOPIC_STREAM_1 = "smart_office/camera/1/stream"
 TARGET_PROCESSING_FPS = 20.0
 TARGET_LOOP_INTERVAL = 1.0 / TARGET_PROCESSING_FPS
 
+
 def main(args):
     # --- MQTT Setup ---
     mqtt_client = MQTTClient(args.mqtt_broker, args.mqtt_port)
@@ -61,7 +62,6 @@ def main(args):
     last_detection_time = 0.0 # Timestamp of the last detection event on *any* camera
     left_detection_fps = 0.0 # Initialize FPS for left camera detection display
     right_detection_fps = 0.0 # Initialize FPS for right camera detection display
-    overall_loop_fps = 0.0 # Initialize overall_loop_fps here
 
     try:
         while True:
@@ -143,7 +143,7 @@ def main(args):
                      mqtt_client.publish(TOPIC_ALERT, alert_msg, qos=1)
 
                 # Calculate FPS, Draw Overlays
-                annotated_frame_left = drawer_left.draw_overlays(frame_left, detections=processed_detections_left, fps=overall_loop_fps)
+                annotated_frame_left = drawer_left.draw_overlays(frame_left, detections=processed_detections_left, fps=left_detection_fps)
                 
                 if not args.headless:
                     cv2.imshow(drawer_left.window_name, annotated_frame_left)
@@ -203,7 +203,7 @@ def main(args):
                      mqtt_client.publish(TOPIC_ALERT, alert_msg, qos=1)
 
                 # Calculate FPS, Draw Overlays
-                annotated_frame_right = drawer_right.draw_overlays(frame_right, detections=processed_detections_right, fps=overall_loop_fps)
+                annotated_frame_right = drawer_right.draw_overlays(frame_right, detections=processed_detections_right, fps=right_detection_fps)
 
                 if not args.headless:
                      cv2.imshow(drawer_right.window_name, annotated_frame_right)
@@ -237,12 +237,6 @@ def main(args):
 
             # --- Throttle the main loop to target processing FPS ---
             loop_elapsed_time = time.time() - loop_start_time
-            
-            # Update overall_loop_fps based on the current iteration's elapsed time
-            if loop_elapsed_time > 0:
-                overall_loop_fps = 1.0 / loop_elapsed_time
-            else:
-                overall_loop_fps = 0.0 # Handle division by zero or extremely fast loops
             
             sleep_duration = TARGET_LOOP_INTERVAL - loop_elapsed_time
             if sleep_duration > 0:
