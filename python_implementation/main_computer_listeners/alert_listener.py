@@ -43,7 +43,7 @@ def on_message(client, userdata, msg):
                     title=f'Smart Office: Person Detected! ({camera_id})',
                     message=message,
                     app_name='Smart Office Alert Listener',
-                    timeout=5  # Notification will disappear after 15 seconds
+                    timeout=3  # Notification will disappear after 15 seconds
                 )
                 print("[AlertLis] Desktop notification sent for PERSON_DETECTED.")
             except Exception as e:
@@ -65,7 +65,7 @@ def on_message(client, userdata, msg):
                     title='Smart Office Alert (Unknown Status)',
                     message=payload_str, # Show the full JSON string
                     app_name='Smart Office Alert Listener',
-                    timeout=10
+                    timeout=3
                 )
                 print("[AlertLis] Desktop notification sent for unknown status JSON.")
             except Exception as e:
@@ -85,7 +85,7 @@ def on_message(client, userdata, msg):
                 title='Smart Office Alert!',
                 message=alert_message,
                 app_name='Smart Office Alert Listener',
-                timeout=5  # Notification will disappear after 10 seconds
+                timeout=3  # Notification will disappear after 10 seconds
             )
             print("[AlertLis] Desktop notification sent for non-JSON message.")
         except Exception as e:
