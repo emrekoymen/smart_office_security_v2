@@ -60,7 +60,8 @@ def main(args):
     detection_buffer_cam0 = []
     detection_buffer_cam1 = []
     last_detection_time = 0.0 # Timestamp of the last detection event on *any* camera
-    display_processing_fps = 0.0 # Initialize FPS for display
+    left_detection_fps = 0.0 # Initialize FPS for left camera detection display
+    right_detection_fps = 0.0 # Initialize FPS for right camera detection display
 
     try:
         while True:
@@ -98,8 +99,14 @@ def main(args):
 
             # --- Process Left Camera ---
             if frame_left is not None:
-                start_left = time.time()
+                detection_start_time = time.time()
                 detections_left, engine_left = detector.detect(frame_left)
+                detection_time_left = time.time() - detection_start_time
+                if detection_time_left > 0:
+                    left_detection_fps = 1.0 / detection_time_left
+                else:
+                    left_detection_fps = 0 # Avoid division by zero
+                
                 processed_detections_left = []
                 person_detected_left = False
 
@@ -136,7 +143,7 @@ def main(args):
                      mqtt_client.publish(TOPIC_ALERT, alert_msg, qos=1)
 
                 # Calculate FPS, Draw Overlays
-                annotated_frame_left = drawer_left.draw_overlays(frame_left, detections=processed_detections_left, fps=display_processing_fps)
+                annotated_frame_left = drawer_left.draw_overlays(frame_left, detections=processed_detections_left, fps=left_detection_fps)
                 
                 if not args.headless:
                     cv2.imshow(drawer_left.window_name, annotated_frame_left)
@@ -152,8 +159,14 @@ def main(args):
 
             # --- Process Right Camera ---
             if frame_right is not None:
-                start_right = time.time()
+                detection_start_time_right = time.time()
                 detections_right, engine_right = detector.detect(frame_right)
+                detection_time_right = time.time() - detection_start_time_right
+                if detection_time_right > 0:
+                    right_detection_fps = 1.0 / detection_time_right
+                else:
+                    right_detection_fps = 0 # Avoid division by zero
+
                 processed_detections_right = []
                 person_detected_right = False
 
@@ -190,7 +203,7 @@ def main(args):
                      mqtt_client.publish(TOPIC_ALERT, alert_msg, qos=1)
 
                 # Calculate FPS, Draw Overlays
-                annotated_frame_right = drawer_right.draw_overlays(frame_right, detections=processed_detections_right, fps=display_processing_fps)
+                annotated_frame_right = drawer_right.draw_overlays(frame_right, detections=processed_detections_right, fps=right_detection_fps)
 
                 if not args.headless:
                      cv2.imshow(drawer_right.window_name, annotated_frame_right)
@@ -224,10 +237,6 @@ def main(args):
 
             # --- Throttle the main loop to target processing FPS ---
             loop_elapsed_time = time.time() - loop_start_time
-            if loop_elapsed_time > 0:
-                display_processing_fps = 1.0 / loop_elapsed_time # Update FPS based on last loop duration
-            else:
-                display_processing_fps = 0 # Avoid division by zero if loop is too fast (unlikely)
             
             sleep_duration = TARGET_LOOP_INTERVAL - loop_elapsed_time
             if sleep_duration > 0:
