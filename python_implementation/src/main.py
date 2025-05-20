@@ -72,18 +72,19 @@ def main(args):
             if not cam_left.stopped:
                 frame_left = cam_left.read()
                 # Optional: if frame_left is None and not cam_left.stopped:
-                #     print("[WARN] Failed to read frame from active left camera, though stream not marked as stopped yet.")
+                #     print(f"[WARN] Left camera ({args.cam0}) active but no frame received this cycle (read returned None).")
 
             frame_right = None
             if not cam_right.stopped:
                 frame_right = cam_right.read()
                 # Optional: if frame_right is None and not cam_right.stopped:
-                #     print("[WARN] Failed to read frame from active right camera, though stream not marked as stopped yet.")
+                #     print(f"[WARN] Right camera ({args.cam1}) active but no frame received this cycle (read returned None).")
             
             # Exit main loop only if BOTH cameras are stopped
-            if cam_left.stopped and cam_right.stopped:
-                print("[INFO] Both camera streams have stopped. Exiting main processing loop.")
-                break
+            # REMOVED: This condition is removed to allow cameras to attempt reconnection.
+            # if cam_left.stopped and cam_right.stopped:
+            #     print("[INFO] Both camera streams appear to be stopped. Exiting main processing loop.")
+            #     break
 
             current_time = time.time()
             jpeg_quality = [int(cv2.IMWRITE_JPEG_QUALITY), 75] # Define once
@@ -147,10 +148,14 @@ def main(args):
                     if not cam_left.stopped: # Camera is supposed to be active but gave no frame
                         print("[WARN] Left camera: No frame to process this cycle, but stream is reported active.")
                     # If cam_left.stopped is True, we just skip, no message needed as it's expected.
+                    else:
+                        print("[WARN] Failed to encode left frame for MQTT.")
             else:
-                if not cam_left.stopped: # Camera is supposed to be active but gave no frame
-                    print("[WARN] Left camera: No frame to process this cycle, but stream is reported active.")
-                # If cam_left.stopped is True, we just skip, no message needed as it's expected.
+                if cam_left.stopped:
+                    print(f"[INFO] Left camera ({args.cam0}) is currently disconnected. Waiting for reconnection...")
+                elif not cam_left.stopped and frame_left is None: # Should ideally not happen if read() is robust, but good for debug
+                    print(f"[INFO] Left camera ({args.cam0}) is active but no frame was processed/available this cycle.")
+                # No message if cam_left.stopped is False and frame_left was processed, or if it was stopped and we expect no frame.
 
             # --- Process Right Camera ---
             if frame_right is not None:
@@ -211,10 +216,13 @@ def main(args):
                     if not cam_right.stopped: # Camera is supposed to be active but gave no frame
                         print("[WARN] Right camera: No frame to process this cycle, but stream is reported active.")
                     # If cam_right.stopped is True, we just skip.
+                    else:
+                        print("[WARN] Failed to encode right frame for MQTT.")
             else:
-                if not cam_right.stopped: # Camera is supposed to be active but gave no frame
-                    print("[WARN] Right camera: No frame to process this cycle, but stream is reported active.")
-                # If cam_right.stopped is True, we just skip.
+                if cam_right.stopped:
+                    print(f"[INFO] Right camera ({args.cam1}) is currently disconnected. Waiting for reconnection...")
+                elif not cam_right.stopped and frame_right is None: # Debug / transient state
+                    print(f"[INFO] Right camera ({args.cam1}) is active but no frame was processed/available this cycle.")
 
             # --- Check for logging buffer timeout ---
             if last_detection_time > 0 and (current_time - last_detection_time) > 5.0:
