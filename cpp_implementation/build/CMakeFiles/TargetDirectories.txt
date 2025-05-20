@@ -1,3 +1,0 @@
-/home/emrek/windsurf/smart_office_security_v2/cpp_implementation/build/CMakeFiles/rebuild_cache.dir
-/home/emrek/windsurf/smart_office_security_v2/cpp_implementation/build/CMakeFiles/edit_cache.dir
-/home/emrek/windsurf/smart_office_security_v2/cpp_implementation/build/CMakeFiles/smart_office_security.dir
