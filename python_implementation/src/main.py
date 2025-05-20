@@ -60,6 +60,7 @@ def main(args):
     detection_buffer_cam0 = []
     detection_buffer_cam1 = []
     last_detection_time = 0.0 # Timestamp of the last detection event on *any* camera
+    display_processing_fps = 0.0 # Initialize FPS for display
 
     try:
         while True:
@@ -135,8 +136,7 @@ def main(args):
                      mqtt_client.publish(TOPIC_ALERT, alert_msg, qos=1)
 
                 # Calculate FPS, Draw Overlays
-                display_fps_left = cam_left.fps # Use configured camera FPS for display
-                annotated_frame_left = drawer_left.draw_overlays(frame_left, detections=processed_detections_left, fps=display_fps_left)
+                annotated_frame_left = drawer_left.draw_overlays(frame_left, detections=processed_detections_left, fps=display_processing_fps)
                 
                 if not args.headless:
                     cv2.imshow(drawer_left.window_name, annotated_frame_left)
@@ -190,8 +190,7 @@ def main(args):
                      mqtt_client.publish(TOPIC_ALERT, alert_msg, qos=1)
 
                 # Calculate FPS, Draw Overlays
-                display_fps_right = cam_right.fps # Use configured camera FPS for display
-                annotated_frame_right = drawer_right.draw_overlays(frame_right, detections=processed_detections_right, fps=display_fps_right)
+                annotated_frame_right = drawer_right.draw_overlays(frame_right, detections=processed_detections_right, fps=display_processing_fps)
 
                 if not args.headless:
                      cv2.imshow(drawer_right.window_name, annotated_frame_right)
@@ -225,6 +224,11 @@ def main(args):
 
             # --- Throttle the main loop to target processing FPS ---
             loop_elapsed_time = time.time() - loop_start_time
+            if loop_elapsed_time > 0:
+                display_processing_fps = 1.0 / loop_elapsed_time # Update FPS based on last loop duration
+            else:
+                display_processing_fps = 0 # Avoid division by zero if loop is too fast (unlikely)
+            
             sleep_duration = TARGET_LOOP_INTERVAL - loop_elapsed_time
             if sleep_duration > 0:
                 time.sleep(sleep_duration)
@@ -246,7 +250,7 @@ if __name__ == "__main__":
     parser.add_argument('--cam1', type=int, default=2, help='Camera 1 index')
     parser.add_argument('--model_tpu', type=str, default='models/output_tflite_graph_edgetpu.tflite')
     parser.add_argument('--model_cpu', type=str, default='models/ssd_mobilenet_v2_coco_quant_postprocess.tflite')
-    parser.add_argument('--threshold', type=float, default=0.5)
+    parser.add_argument('--threshold', type=float, default=0.7)
     parser.add_argument('--headless', action='store_true', help='Run without display windows')
     parser.add_argument('--mqtt-broker', type=str, default='192.168.5.135', help='MQTT broker address')
     parser.add_argument('--mqtt-port', type=int, default=1883, help='MQTT broker port')
